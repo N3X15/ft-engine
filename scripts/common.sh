@@ -23,12 +23,12 @@ github_token=
 github_user=
 
 function github_download() {
+    echo "GITHUB: $1 $2 $3"
     repo=$1; shift
     rev=$1; shift
     dest=$1; shift
-    mkdir $dest
-
     if [ ! -z $github_token ] ; then
+        if [ ! -d $dest ] ; then mkdir $dest; fi
         retry curl \
             --header "Authorization:\\ token\\ $github_token" \
             --location https://api.github.com/repos/$repo/tarball/$rev \
@@ -42,6 +42,7 @@ function github_download() {
         if [ $? != 0 ] ; then return; fi
         rm -f $dest.tar.gz
     elif [ ! -z $github_user ] ; then
+        if [ ! -d $dest ] ; then mkdir $dest; fi
         retry curl \
             --user $github_user \
             --location https://api.github.com/repos/$repo/tarball/$rev \
@@ -55,6 +56,7 @@ function github_download() {
         if [ $? != 0 ] ; then return; fi
         rm -f $dest.tar.gz
     elif [ $github_use_ssh != 0 ] ; then
+        if [ ! -d $dest ] ; then mkdir $dest; fi
         tempdir=$(TMPDIR=$PWD mktemp -d)
         retry git clone git@github.com:${repo}.git $tempdir
         if [ $? != 0 ] ; then return; fi
@@ -74,16 +76,20 @@ function github_download() {
         if [ $? != 0 ] ; then return; fi
         rm -rf $tempdir
     else
-        retry curl \
-            --location https://github.com/$repo/archive/${rev}.tar.gz \
-            --output $dest.tar.gz
-        tar --extract \
-            --gzip \
-            --directory=$dest \
-            --strip-components=1 \
-            --file $dest.tar.gz
+        if [ ! -d $dest ]; then
+            retry git clone https://github.com/${repo}.git $dest
+            if [ $? != 0 ] ; then return; fi
+            pushd $dest
+        else
+            pushd $dest
+            retry git fetch origin
+            if [ $? != 0 ] ; then return; fi
+        fi
+        git clean -fxd
+        git reset --hard
+        git checkout $rev
         if [ $? != 0 ] ; then return; fi
-        rm -f $dest.tar.gz
+        popd
     fi
 }
 
